@@ -31,4 +31,4 @@ eureka:
 # Must match user-service.yml's jwt.secret exactly.
 # In production, inject this via an environment variable instead of committing it here.
 jwt:
-  secret: ${JWT_SECRET:this-is-a-dev-only-secret-replace-me-before-deploying-32chars+}
+  secret: ${JWT_SECRET}

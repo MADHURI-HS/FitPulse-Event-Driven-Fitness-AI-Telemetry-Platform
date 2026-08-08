@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/fitness_user_db
-    username: postgres
-    password: admin@123
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fitness_user_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
@@ -20,5 +20,5 @@ eureka:
 # Must match api-gateway.yml's jwt.secret exactly - the gateway validates
 # tokens signed here.
 jwt:
-  secret: ${JWT_SECRET:this-is-a-dev-only-secret-replace-me-before-deploying-32chars+}
+  secret: ${JWT_SECRET}
   expiration-ms: 86400000 # 24 hours
