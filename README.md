@@ -1,4 +1,5 @@
-# FitPulse — Fitness Tracking Microservices
+# FitPulse-Event-Driven-Fitness-AI-Telemetry-Platform
+
 
 A **microservices-based fitness tracking application** built with Spring Boot, Spring Cloud, React, MongoDB, PostgreSQL, RabbitMQ, and Google Gemini AI.
 
