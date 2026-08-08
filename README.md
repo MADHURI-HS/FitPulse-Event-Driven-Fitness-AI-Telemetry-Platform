@@ -1,134 +1,266 @@
-# FitPulse — Keycloak → Custom JWT Migration
+# FitPulse — Fitness Tracking Microservices
 
-This is your FitPulse project with Keycloak fully removed and replaced with
-self-issued JWT authentication (Spring Security-free, HMAC-signed, same
-pattern you already built in URL Shortener).
+A **microservices-based fitness tracking application** built with Spring Boot, Spring Cloud, React, MongoDB, PostgreSQL, RabbitMQ, and Google Gemini AI.
 
-## What changed, and why
+The application provides JWT-based authentication, fitness activity tracking, and AI-powered fitness recommendations using an event-driven architecture.
 
-### 1. `userservice` is now the identity provider
-Previously, all real authentication happened in Keycloak — `userservice`
-only ever *stored a mirror* of a Keycloak user (with a dummy password) after
-the gateway's `KeycloakUserSyncFilter` auto-registered them on first request.
+---
 
-Now `userservice` does the actual work:
-- **`POST /api/users/register`** — hashes the password with BCrypt
-  (`spring-security-crypto`, not the full Spring Security starter — no
-  need for the extra weight), saves the user, returns a signed JWT.
-- **`POST /api/users/login`** — verifies email + password against the
-  BCrypt hash, returns a signed JWT.
-- New: `security/JwtUtil.java` — signs tokens with HMAC-SHA256 using
-  `jjwt` (`io.jsonwebtoken`), same library family you'd reach for outside
-  Spring too.
-- `User.java` no longer has `keycloakId` — there's no external identity to
-  mirror anymore.
-- Added `GlobalExceptionHandler` so a duplicate email or bad password
-  returns a clean 400 instead of a raw 500 stack trace.
-- **Fixed a pre-existing bug while I was in here:** the old `UserResponse`
-  DTO included the (hashed) `password` field and returned it to the
-  client on every profile fetch. Removed — a response DTO should never
-  echo back credential material, hashed or not.
+## 🚀 Features
 
-### 2. `gateway` no longer talks to an identity provider at all
-- **Removed:** `KeycloakUserSyncFilter.java`, the `gateway/user/` package
-  (`UserService`, `WebClientConfig`, `RegisterRequest`, `UserResponse` —
-  these only existed to call `userservice` and auto-register a Keycloak
-  user; that job doesn't exist anymore since register/login are now first-class
-  `userservice` endpoints).
-- **Removed:** `spring-boot-starter-oauth2-resource-server` dependency and
-  the `jwk-set-uri` pointing at a Keycloak realm.
-- **Added:** `security/JwtUtil.java` (validates a token's signature/expiry
-  with the *same* HMAC secret `userservice` signs with — no network call
-  to an identity provider needed) and `security/JwtAuthenticationFilter.java`
-  (a plain `WebFilter` that rejects requests with a missing/invalid token
-  and forwards the caller's id as `X-User-ID`, same contract
-  `activityservice`/`aiservice` already expected).
-- **Removed Spring Security entirely** from the gateway — `SecurityConfig.java`
-  is replaced by `CorsConfig.java`, which only handles CORS. This is
-  possible specifically because auth is now a plain custom filter instead
-  of `oauth2ResourceServer(...)`, which needed the full Spring Security
-  filter chain machinery.
+* JWT-based user authentication and authorization
+* User registration and login with BCrypt password hashing
+* Fitness activity creation and tracking
+* AI-generated fitness recommendations
+* Asynchronous activity processing using RabbitMQ
+* API Gateway with centralized JWT validation
+* Service discovery using Eureka
+* Centralized configuration using Spring Cloud Config
+* PostgreSQL for user data
+* MongoDB for activities and recommendations
+* React frontend with Redux Toolkit
 
-### 3. `activityservice` and `aiservice` — untouched
-They never talked to Keycloak directly; they trust `X-User-ID`, which the
-gateway still provides, just derived differently now (JWT claim instead of
-Keycloak sync). Zero changes needed here — worth mentioning in an interview
-as evidence the service boundary was well-designed originally.
+---
 
-### 4. `configserver`
-- `config/api-gateway.yml` — removed `spring.security.oauth2.resourceserver.jwt.jwk-set-uri`,
-  added `jwt.secret` (env-overridable via `JWT_SECRET`, dev-only default committed).
-- `config/user-service.yml` — added the same `jwt.secret` + `jwt.expiration-ms`.
-  **These two secrets must match** — that's what lets the gateway verify a
-  token it didn't issue itself.
+## 🏗️ Architecture
 
-### 5. Frontend (`fitness-app-frontend`)
-- Removed `react-oauth2-code-pkce` and `authConfig.js` (the PKCE redirect
-  flow to Keycloak's `/auth` and `/token` endpoints).
-- Added `components/Login.jsx` and `components/Register.jsx` — real forms
-  that call `userservice` directly through the gateway.
-- `authSlice.js` — now stores `{ token, userId, email }` from your own
-  API's response instead of a decoded Keycloak `tokenData` object.
-- `api.js` — attaches `Authorization: Bearer <token>` on every request; a
-  401 response clears local storage and bounces to `/login`.
-- `App.jsx` — route-based `ProtectedRoute` instead of a global
-  `AuthContext` provider gate.
-
-## Before you run this
-
-**I could not compile this in my sandbox** — Maven Central isn't reachable
-from this environment, so I did a careful manual review instead of a
-verified build. Run this before anything else:
-
-```bash
-cd userservice && ./mvnw clean install -DskipTests
-cd ../gateway && ./mvnw clean install -DskipTests
+```text
+                    ┌─────────────────┐
+                    │ React Frontend  │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   API Gateway   │
+                    │    :8080        │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+       ┌────────────┐ ┌──────────────┐ ┌────────────┐
+       │User Service│ │Activity      │ │ AI Service │
+       │   :8081    │ │Service :8082 │ │   :8083    │
+       └─────┬──────┘ └──────┬───────┘ └─────┬──────┘
+             │               │               │
+             ▼               ▼               ▼
+        PostgreSQL        MongoDB         MongoDB
+                             │
+                             ▼
+                         RabbitMQ
+                             │
+                             ▼
+                       Gemini API
 ```
 
-Fix anything that surfaces (should mainly be dependency version
-resolution, if anything) before moving on.
+### Infrastructure
 
-## Local setup (unchanged pieces)
+* **Eureka Server** — service discovery (`:8761`)
+* **Config Server** — centralized configuration (`:8888`)
+* **API Gateway** — routing and JWT validation (`:8080`)
 
-You still need Postgres, MongoDB, and RabbitMQ running locally exactly as
-before — none of that changed. **You do NOT need to run Keycloak anymore** —
-that's the whole point of this migration, and it directly removes your
-hardest deployment blocker.
+---
 
-Start order: `eureka` → `configserver` → `userservice` → `activityservice`
-→ `aiservice` → `gateway`.
+## 🔄 Request Flow
 
-## Testing the new auth flow
+### Authentication
 
-```bash
-# Register
-curl -X POST http://localhost:8080/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"secret123","firstName":"Test","lastName":"User"}'
-# -> { "token": "...", "userId": "...", "email": "test@example.com" }
-
-# Login
-curl -X POST http://localhost:8080/api/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"secret123"}'
-
-# Use the token
-curl http://localhost:8080/api/activities \
-  -H "Authorization: Bearer <token from above>"
-
-# No token -> 401
-curl -i http://localhost:8080/api/activities
+```text
+React
+  ↓
+API Gateway
+  ↓
+User Service
+  ↓
+PostgreSQL
+  ↓
+JWT returned to client
 ```
 
-## Updating your resume bullet
+The API Gateway validates the JWT on protected requests and forwards the authenticated user's ID to downstream services through the `X-User-ID` header.
 
-Your current FitPulse bullet says *"secured with Keycloak OAuth 2.0 / JWT."*
-Once this is deployed, the accurate version is:
+### Activity + AI Processing
 
-> Secured inter-service authentication with self-issued JWTs (HMAC-SHA256,
-> BCrypt password hashing), validated at the API Gateway via a custom
-> WebFilter — eliminating a dependency on external identity infrastructure.
+```text
+React
+  ↓
+API Gateway
+  ↓
+Activity Service
+  ↓
+MongoDB
+  ↓
+RabbitMQ
+  ↓
+AI Service
+  ↓
+Google Gemini
+  ↓
+Recommendation → MongoDB
+```
 
-This is a *stronger* interview story than the Keycloak version, not a
-weaker one: you can now explain every line of the auth flow yourself,
-because you wrote all of it.
+AI processing is asynchronous, so creating an activity does not have to wait for Gemini to generate the recommendation.
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+
+* Java 23
+* Spring Boot
+* Spring Cloud
+* Spring Cloud Gateway
+* Eureka
+* Spring Cloud Config
+* Spring Data JPA
+* Spring Data MongoDB
+* WebClient
+* RabbitMQ
+* JWT / JJWT
+* BCrypt
+
+### Frontend
+
+* React
+* Vite
+* Redux Toolkit
+* React Router
+* Axios
+* Material UI
+
+### Databases & AI
+
+* PostgreSQL
+* MongoDB
+* RabbitMQ
+* Google Gemini API
+
+---
+
+## 📁 Project Structure
+
+```text
+FitPulse/
+├── eureka/
+├── configserver/
+├── gateway/
+├── userservice/
+├── activityservice/
+├── aiservice/
+├── fitness-app-frontend/
+└── README.md
+```
+
+---
+
+## 🔌 Main APIs
+
+| Method | Endpoint                             | Description           |
+| ------ | ------------------------------------ | --------------------- |
+| POST   | `/api/users/register`                | Register user         |
+| POST   | `/api/users/login`                   | Login                 |
+| GET    | `/api/users/{id}`                    | Get user              |
+| POST   | `/api/activities`                    | Create activity       |
+| GET    | `/api/activities`                    | Get user activities   |
+| GET    | `/api/activities/{id}`               | Get activity          |
+| GET    | `/api/recommendations/activity/{id}` | Get AI recommendation |
+
+All protected APIs are accessed through the API Gateway using:
+
+```http
+Authorization: Bearer <JWT>
+```
+
+---
+
+## ⚙️ Getting Started
+
+### Prerequisites
+
+* JDK 23
+* Maven
+* Node.js
+* PostgreSQL
+* MongoDB
+* RabbitMQ
+* Google Gemini API Key
+
+### 1. Clone
+
+```bash
+git clone <repository-url>
+cd FitPulse
+```
+
+### 2. Configure
+
+Configure PostgreSQL, MongoDB, RabbitMQ, JWT secret, and Gemini API credentials in the application configuration/environment variables.
+
+### 3. Start Services
+
+Start in this order:
+
+```text
+Eureka
+↓
+Config Server
+↓
+User Service
+Activity Service
+AI Service
+↓
+API Gateway
+↓
+React Frontend
+```
+
+### 4. Start Frontend
+
+```bash
+cd fitness-app-frontend
+npm install
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+Gateway:
+
+```text
+http://localhost:8080
+```
+
+---
+
+## 🔐 Security
+
+* Passwords are hashed using BCrypt.
+* JWTs are signed using HMAC-SHA256.
+* API Gateway validates JWTs before forwarding protected requests.
+* User identity is propagated using `X-User-ID`.
+* Sensitive credentials should be supplied through environment variables in production.
+
+---
+
+## 📌 Future Improvements
+
+* Refresh token support
+* Role-based authorization
+* Activity ownership validation
+* RabbitMQ retry/dead-letter queues
+* Resilience4j circuit breakers
+* Centralized logging and monitoring
+* Docker/Kubernetes deployment
+* Automated integration tests
+
+---
+
+## 👩‍💻 Author
+
+**Madhuri H S**
+
+Java | Spring Boot | Microservices | AI
