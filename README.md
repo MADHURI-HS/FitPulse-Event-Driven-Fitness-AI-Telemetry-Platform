@@ -52,6 +52,7 @@ The application provides JWT-based authentication, fitness activity tracking, an
                              ▼
                        Gemini API
 ```
+![FitPulse Architecture](docs/architecture.svg)
 
 ### Infrastructure
 
