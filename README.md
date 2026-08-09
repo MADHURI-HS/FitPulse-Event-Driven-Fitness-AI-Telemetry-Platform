@@ -25,33 +25,6 @@ The application provides JWT-based authentication, fitness activity tracking, an
 
 ## 🏗️ Architecture
 
-```text
-                    ┌─────────────────┐
-                    │ React Frontend  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   API Gateway   │
-                    │    :8080        │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              ▼              ▼              ▼
-       ┌────────────┐ ┌──────────────┐ ┌────────────┐
-       │User Service│ │Activity      │ │ AI Service │
-       │   :8081    │ │Service :8082 │ │   :8083    │
-       └─────┬──────┘ └──────┬───────┘ └─────┬──────┘
-             │               │               │
-             ▼               ▼               ▼
-        PostgreSQL        MongoDB         MongoDB
-                             │
-                             ▼
-                         RabbitMQ
-                             │
-                             ▼
-                       Gemini API
-```
 ![FitPulse Architecture](docs/architecture.svg)
 
 ### Infrastructure
