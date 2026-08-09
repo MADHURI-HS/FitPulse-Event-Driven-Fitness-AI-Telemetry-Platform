@@ -25,7 +25,7 @@ The application provides JWT-based authentication, fitness activity tracking, an
 
 ## 🏗️ Architecture
 
-![FitPulse Architecture](docs/architecture.svg)
+![FitPulse Architecture](fitpulse-architecture.svg)
 
 ### Infrastructure
 
